@@ -1,15 +1,6 @@
 # URL For Action
 web_url = "https://www.freecallerregistry.com/fcr/#submitform"
 
-# WebMail Creds
-webmail_url = "https://mail.hostinger.com/"
-web_mail = ""
-password = "%*@sTV5*LEw6v4fG$IszBD@h"
-server_ = "imap.hostinger.com"
-
-# Calling URL
-calling_url = "https://surplusagentsforamericans.com/"
-
 # Google API Key
 g_api = "AIzaSyDs3jJCdnRCJZhtnUNUitkx0AUTSni63oI"
 

@@ -10,8 +10,7 @@ import logging
 import os
 from dotenv import load_dotenv
 from creds import (
-    web_url, calling_url,
-    contact_name, company_phone, city, company_email, calling_company_address, calling_company_name, calling_company_url, call_count, note, zipcode, service_provider
+    web_url, contact_name, company_phone, city, company_email, calling_company_address, calling_company_name, calling_company_url, call_count, note, zipcode, service_provider
 )
 from fetch_email import fetch_otp, login, logout
 from datetime import datetime
