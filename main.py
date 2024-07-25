@@ -52,7 +52,7 @@ def driver_setup():
     """
     # Set up Chrome options for optimization
     chrome_options = webdriver.ChromeOptions()
-    # chrome_options.add_argument('--headless')  # Run in headless mode
+    chrome_options.add_argument('--headless')  # Run in headless mode
     chrome_options.add_argument('--disable-gpu')  # Disable GPU hardware acceleration
     chrome_options.add_argument('--no-sandbox')  # Bypass OS security model
     chrome_options.add_argument('--disable-dev-shm-usage')  # Overcome limited resource problems
@@ -116,7 +116,6 @@ def fill_form(driver, phone_numbers, current_time, mail):
         num_input.send_keys(phone_number)
         if i < min(len(phone_numbers), 20) - 1:
             try:
-                print(i < min(len(phone_numbers), 20) - 1)
                 # Add Number Button
                 WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, 'add-number-command'))).click()
             except Exception as e:
@@ -148,20 +147,20 @@ def fill_form(driver, phone_numbers, current_time, mail):
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'call_count'))).send_keys(call_count)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'additional_feedback'))).send_keys(note)
         
+        logging.info('Form Filled Successfully')
+        
         send_otp_ = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'send-verification-code')))
         send_otp_.click()
+        print("Waiting For OTP...")
         
         # Get OTP!
-        for _ in range(3):
-            print("Waiting For OTP...")
+        while True:
             sleep(5)
             otp = fetch_otp(mail, current_time)
             if otp:
                 otp = otp.split(':')[-1].replace(' ', '')
                 logging.info(f"OTP Received: {otp}")
                 break
-            else:
-                print("No OTP Received Yet. Waiting For OTP...")
         
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'captcha'))).send_keys(otp)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'submitButton'))).click()
@@ -185,7 +184,7 @@ def process_batches(values):
           If the number of values is not a multiple of 20, the last batch may contain fewer than 20 values.
     """
     batches = [values[i:i + 20] for i in range(0, len(values), 20)]
-    logging.info('Made Batches of 20 Numbers for Further Processing')
+    logging.info(F'Made {len(batches)} Batches of 20 Number(s) for Further Processing')
     return batches
 
 def start_submission(driver):
@@ -244,7 +243,6 @@ def main(driver, values):
     """
     try:
         mail = login()
-        results_list = []
         
         # Process values in batches of 20
         batches = process_batches(values)
@@ -255,13 +253,12 @@ def main(driver, values):
             result = {}
             result['Batch'] = batch
             # Get the current time in UTC
-            current_time = datetime.now(pytz.utc)
-            print(current_time)
+            current_time = datetime.now(pytz.utc).replace(microsecond=0)
             phone_numbers = [row[0] for row in batch]
             feedback = fill_form(driver, phone_numbers, current_time, mail)
             if feedback:
                 result['Feedback ID'] = feedback
-                logging.info(f'Batch {index + 1}/{len(batches)} Finished Successfully')
+                logging.info(f'Batch {index + 1}/{len(batches)} Finished Successfully => Feedback ID => {feedback}')
                 # Wait before proceeding with the next batch
                 sleep(0.5)
             else:
@@ -271,8 +268,8 @@ def main(driver, values):
         # Close the WebDriver & Mail Connection after the task is done
         logout(mail)
         driver.quit()
-        print('---------------------------------')
-        pprint(results_list)
+        end_time = datetime.now(pytz.utc).replace(microsecond=0)
+        logging.info(f'Driver Exited After Successful Run Of The BOT at => {end_time}!')
 
 if __name__ == "__main__":
     '''
@@ -280,7 +277,8 @@ if __name__ == "__main__":
         The Pattern of Sheet URL is: https://docs.google.com/spreadsheets/d/{sheet_id}/edit?gid=0#gid=0
         e.g. https://docs.google.com/spreadsheets/d/1YyrMfGEl2KioO90rcKYuqFrzJhMblJsTmOyxvYhZtvo/edit?gid=0#gid=0
     '''
-    
+    start_time = datetime.now(pytz.utc).replace(microsecond=0)
+    logging.info(f'Bot Run Started at => {start_time}')
     sheet_id = "1YyrMfGEl2KioO90rcKYuqFrzJhMblJsTmOyxvYhZtvo"
     json_response = get_sheet_data(sheet_id)
     

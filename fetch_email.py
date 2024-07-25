@@ -45,8 +45,6 @@ def login():
     # Connect to the mail server
     mail = imaplib.IMAP4_SSL(server_)
     mail.login(web_mail, password)
-    # Select the inbox
-    mail.select('inbox')
     logging.info('Logged in to the mail server successfully.')
     return mail
 
@@ -76,13 +74,18 @@ def fetch_otp(mail, start_time):
          Returns None if no emails are found or an error occurs.
     """
     try:
+        # Select the inbox
+        mail.select('inbox')
+
         # Search for emails from the specific sender
         search_criteria = '(FROM "no-reply@tnsi.com")'
         status, data = mail.search(None, search_criteria)
-        
-        mail_ids = []
-        for block in data:
-            mail_ids += block.split()
+
+        if status != 'OK':
+            logging.error('Search failed.')
+            return
+
+        mail_ids = data[0].split()
         
         if not mail_ids:
             logging.info('No emails found from no-reply@tnsi.com.')
@@ -90,21 +93,27 @@ def fetch_otp(mail, start_time):
 
         # Fetch headers and filter by date
         email_dates = []
-        for i in mail_ids:
-            status, data = mail.fetch(i, '(BODY[HEADER.FIELDS (DATE)])')
-            for response_part in data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    date = parsedate_to_datetime(msg['Date'])
-                    
-                    # Ensure email date is in UTC
-                    if date.tzinfo is None:
-                        date = date.replace(tzinfo=pytz.utc)
-                    
-                    if date > start_time:
-                        email_dates.append((i, date))
+        # for i in mail_ids:
+        status, data = mail.fetch(mail_ids[-1], '(BODY[HEADER.FIELDS (DATE)])')
+        # if status != 'OK':
+        #     logging.error(f'Failed to fetch email ID {i}')
+        #     continue
+        for response_part in data:
+            if isinstance(response_part, tuple):
+                msg = email.message_from_bytes(response_part[1])
+                date = parsedate_to_datetime(msg['Date'])
+                
+                # print(f"Comparison| Start_time => {start_time} | Message_time => {date}")
+                
+                # Ensure email date is in UTC
+                if date.tzinfo is None:
+                    date = date.replace(tzinfo=pytz.utc)
+                
+                if date > start_time:
+                    email_dates.append((mail_ids[-1], date))
 
         if not email_dates:
+            # logging.info('No emails found after the specified start time.')
             return
 
         # Sort emails by date, most recent first
@@ -113,14 +122,30 @@ def fetch_otp(mail, start_time):
 
         # Fetch the most recent email by ID
         status, data = mail.fetch(most_recent_email_id, '(RFC822)')
+        if status != 'OK':
+            logging.error('Failed to fetch the most recent email.')
+            return
+
         for response_part in data:
             if isinstance(response_part, tuple):
                 message = email.message_from_bytes(response_part[1])
                 mail_subject = message['subject']
-                
                 return mail_subject
     except Exception as e:
-        logging.error(f'An error occurred while Fetching Email: {e}')
+        logging.error(f'An error occurred while fetching email: {e}')
+        print(f'An error occurred while fetching email: {e}')
 
 if __name__ == '__main__':
-    fetch_otp()
+    current_time = datetime.now(pytz.utc).replace(microsecond=0)
+    mail = login()
+    from time import sleep
+    while True:
+        sleep(5)
+        otp = fetch_otp(mail, current_time)
+        if otp:
+            print(otp)
+            break
+        else:
+            print('retrying')
+        
+    logout(mail)
