@@ -120,7 +120,7 @@ def fetch_otp(mail, start_time):
                 
                 return mail_subject
     except Exception as e:
-        logging.error(f'An error occurred: {e}')
+        logging.error(f'An error occurred while Fetching Email: {e}')
 
 if __name__ == '__main__':
     fetch_otp()
