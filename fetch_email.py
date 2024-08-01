@@ -113,7 +113,7 @@ def fetch_otp(mail, start_time):
                     email_dates.append((mail_ids[-1], date))
 
         if not email_dates:
-            # logging.info('No emails found after the specified start time.')
+            logging.info('Still Waiting For OTP.')
             return
 
         # Sort emails by date, most recent first

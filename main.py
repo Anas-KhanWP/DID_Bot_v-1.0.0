@@ -15,6 +15,10 @@ from creds import (
 from fetch_email import fetch_otp, login, logout
 from datetime import datetime
 import pytz
+import pandas as pd
+import gspread
+from gspread_dataframe import set_with_dataframe
+#     driver.quit()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +34,13 @@ current_date = datetime.now().strftime('%Y-%m-%d')
 subfolder = os.path.join(log_folder, current_date)
 if not os.path.exists(subfolder):
     os.makedirs(subfolder)
+    
+# Create a folder for Results
+result_folder = 'results'
+if not os.path.exists(result_folder):
+    os.makedirs(result_folder)
+    
+gc = gspread.service_account(filename='glassy-bonsai-390211-1e87faf20a89.json')
 
 # Set up logging
 log_file = os.path.join(subfolder, 'automation.log')
@@ -52,7 +63,7 @@ def driver_setup():
     """
     # Set up Chrome options for optimization
     chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('--headless')  # Run in headless mode
+    # chrome_options.add_argument('--headless')  # Run in headless mode
     chrome_options.add_argument('--disable-gpu')  # Disable GPU hardware acceleration
     chrome_options.add_argument('--no-sandbox')  # Bypass OS security model
     chrome_options.add_argument('--disable-dev-shm-usage')  # Overcome limited resource problems
@@ -93,6 +104,70 @@ def get_sheet_data(id):
     except Exception as e:
         print(f'Error fetching data from Google Sheet: {str(e)}')
         
+def update_sheet_data(spreadsheet_url, df):
+    """
+    Updates the data in a Google Sheet using the provided URL and DataFrame.
+
+    Parameters:
+    spreadsheet_url (str): The URL of the Google Sheet to be updated.
+    df (pandas.DataFrame): The DataFrame containing the data to be written to the Google Sheet.
+
+    Returns:
+    None
+
+    The function opens the Google Sheet specified by the `spreadsheet_url`, selects the first sheet,
+    clears the existing data in the worksheet, and then writes the DataFrame `df` to the worksheet using the
+    `set_with_dataframe` function from the `gspread_dataframe` module.
+    """
+    sh = gc.open_by_url(spreadsheet_url)
+
+    # Select the first sheet in the document
+    worksheet = sh.get_worksheet(0)
+
+    # Read existing data into a DataFrame
+    existing_data = pd.DataFrame(worksheet.get_all_records())
+
+    # Filter out rows where the last column is None or an empty string
+    if not existing_data.empty:
+        last_column = existing_data.columns[-1]
+        existing_data = existing_data[
+            (existing_data[last_column] is not None) & 
+            (existing_data[last_column] != "") &
+            (existing_data.apply(lambda row: row.count() > 1, axis=1))
+        ]
+
+    # Concatenate the existing data with the new data
+    if not existing_data.empty:
+        # pprint(existing_data)
+        # print(len(existing_data))
+        # print('-----------------------------')
+        # Iterate through existing_data and print each column with reference
+        # for index, row in existing_data.iterrows():
+        #     print(f"Row {index + 1}:")
+        #     for col_name in existing_data.columns:
+        #         print(f"  Column '{col_name}' at index {index}: {row[col_name]}")
+            
+        print('-----------------------------')
+        df = pd.concat([existing_data, df], ignore_index=True)
+        # print('printing DF')
+        # pprint(df)
+        # print(len(df))
+        # print('-----------------------------')
+        # Iterate through existing_data and print each column with reference
+        # for index, row in df.iterrows():
+        #     print(f"Row {index + 1}:")
+        #     for col_name in df.columns:
+        #         print(f"  Column '{col_name}' at index {index}: {row[col_name]}")
+
+    # Clear the existing data in the worksheet
+    worksheet.clear()
+
+    # Write the updated DataFrame to the worksheet
+    set_with_dataframe(worksheet, df)
+
+
+    
+        
 def fill_form(driver, phone_numbers, current_time, mail):
     """
     Fills the form on the website with the provided phone numbers, current time, and email.
@@ -113,6 +188,10 @@ def fill_form(driver, phone_numbers, current_time, mail):
         # Find the element and send the Enter key
         num_input = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, f'enterprise_phone_{i}')))
         sleep(0.2)
+        try:
+            phone_number = phone_number.replace("[", "").replace("]", "").replace("'", "")
+        except:
+            print('Could not purify phone number')
         num_input.send_keys(phone_number)
         if i < min(len(phone_numbers), 20) - 1:
             try:
@@ -239,37 +318,72 @@ def main(driver, values):
         - Waits for 1 second before proceeding with the next batch.
     5. Closes the WebDriver after the task is done using the `logout()` and `driver.quit()` functions.
     6. Prints a separator line.
-    7. Prints the `results_list`.
+    7. Saves the `results_list` into csv
     """
     try:
         mail = login()
         
+        results_list = []
+        
         # Process values in batches of 20
         batches = process_batches(values)
         for index, batch in enumerate(batches):
-            print(f'Processing Batch {index + 1}/{len(batches)}')
-            logging.info(f'Processing Batch {index + 1}/{len(batches)}')
-            start_submission(driver)
-            result = {}
-            result['Batch'] = batch
-            # Get the current time in UTC
-            current_time = datetime.now(pytz.utc).replace(microsecond=0)
-            phone_numbers = [row[0] for row in batch]
-            feedback = fill_form(driver, phone_numbers, current_time, mail)
-            if feedback:
-                result['Feedback ID'] = feedback
-                logging.info(f'Batch {index + 1}/{len(batches)} Finished Successfully => Feedback ID => {feedback}')
-                # Wait before proceeding with the next batch
-                sleep(0.5)
-            else:
-                logging.error(f'Batch {index + 1}/{len(batches)} RETURNED WITH AN ERROR!!!')
-                continue
+            # if batch
+            # logging.info(f'Processing Batch {index + 1}/{len(batches)}')
+            # pprint(batch)
+            phone_numbers = [row[0] for row in batch if len(row) == 1]
+            # print(phone_numbers)
+            if phone_numbers:
+                print(phone_numbers)
+                print(f'Processing Batch {index + 1}/{len(batches)}')
+                start_submission(driver)
+                # Get the current time in UTC
+                current_time = datetime.now(pytz.utc).replace(microsecond=0)
+                # print(batch)
+                feedback = fill_form(driver, phone_numbers, current_time, mail)
+                if feedback:
+                    for bat in batch:
+                        # Check if any part of the row contains '+00:00' and skip it if found
+                        if any('+00:00' in str(element) for element in bat):
+                            # print('00:00 found in bat...')
+                            continue
+
+                        # print(f'Bat => {bat}')
+                        result = {}
+                        result["DID'S"] = bat[0].replace("[", "").replace("]", "").replace("'", "").replace("'", '')
+                        result['STATUS'] = ""
+                        result['TIME'] = datetime.now(pytz.utc).replace(microsecond=0)
+                        result['Feedback ID'] = feedback
+                        results_list.append(result)
+
+                    logging.info(f'Batch {index + 1}/{len(batches)} Finished Successfully => Feedback ID => {feedback}')
+                    # Wait before proceeding with the next batch
+                    sleep(0.5)
+
+                else:
+                    logging.error(f'Batch {index + 1}/{len(batches)} RETURNED WITH AN ERROR!!!')
+                    continue
+                
+    except Exception as e:
+        print(f"error: {e}")
+        
     finally:
         # Close the WebDriver & Mail Connection after the task is done
         logout(mail)
         driver.quit()
         end_time = datetime.now(pytz.utc).replace(microsecond=0)
         logging.info(f'Driver Exited After Successful Run Of The BOT at => {end_time}!')
+        
+        # Convert results_list to a DataFrame and print it
+        if results_list:
+            df = pd.DataFrame(results_list)
+            print(df)
+            
+            update_sheet_data(sheet_url, df)
+
+            logging.info('Results printed to the console')
+        else:
+            print('List is empty')
 
 if __name__ == "__main__":
     '''
@@ -280,6 +394,7 @@ if __name__ == "__main__":
     start_time = datetime.now(pytz.utc).replace(microsecond=0)
     logging.info(f'Bot Run Started at => {start_time}')
     sheet_id = "1YyrMfGEl2KioO90rcKYuqFrzJhMblJsTmOyxvYhZtvo"
+    sheet_url = "https://docs.google.com/spreadsheets/d/1YyrMfGEl2KioO90rcKYuqFrzJhMblJsTmOyxvYhZtvo/edit?gid=0#gid=0"
     json_response = get_sheet_data(sheet_id)
     
     if json_response:

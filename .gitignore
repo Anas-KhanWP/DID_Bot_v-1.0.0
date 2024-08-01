@@ -1,4 +1,8 @@
 .env
+glassy-bonsai-390211-1e87faf20a89.json
+*.csv
+*.log
+*.zip
 /venv
 /__pycache__
 /DID_Bot_v-1.zip
