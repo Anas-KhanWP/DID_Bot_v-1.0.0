@@ -357,8 +357,8 @@ def main(driver, values):
                         results_list.append(result)
 
                     logging.info(f'Batch {index + 1}/{len(batches)} Finished Successfully => Feedback ID => {feedback}')
-                    # Wait before proceeding with the next batch
-                    sleep(0.5)
+                    # Only Process 1st Batch
+                    break
 
                 else:
                     logging.error(f'Batch {index + 1}/{len(batches)} RETURNED WITH AN ERROR!!!')
