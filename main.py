@@ -104,7 +104,7 @@ def get_sheet_data(id):
     except Exception as e:
         print(f'Error fetching data from Google Sheet: {str(e)}')
         
-def update_sheet_data(spreadsheet_url, df):
+def update_sheet_data(spreadsheet_url, df, clear=False):
     """
     Updates the data in a Google Sheet using the provided URL and DataFrame.
 
@@ -116,9 +116,9 @@ def update_sheet_data(spreadsheet_url, df):
     None
 
     The function opens the Google Sheet specified by the `spreadsheet_url`, selects the first sheet,
-    clears the existing data in the worksheet, and then writes the DataFrame `df` to the worksheet using the
-    `set_with_dataframe` function from the `gspread_dataframe` module.
+    matches the DID'S in the existing data with the new data, and updates matching rows without appending new rows.
     """
+    # Authorize and open the Google Sheet
     sh = gc.open_by_url(spreadsheet_url)
 
     # Select the first sheet in the document
@@ -127,46 +127,38 @@ def update_sheet_data(spreadsheet_url, df):
     # Read existing data into a DataFrame
     existing_data = pd.DataFrame(worksheet.get_all_records())
 
-    # Filter out rows where the last column is None or an empty string
     if not existing_data.empty:
-        last_column = existing_data.columns[-1]
-        existing_data = existing_data[
-            (existing_data[last_column] is not None) & 
-            (existing_data[last_column] != "") &
-            (existing_data.apply(lambda row: row.count() > 1, axis=1))
-        ]
+            for dex, existing_row in existing_data.iterrows():
+                if clear:
+                    print('Clearing Columns')
+                    # Clear 'TIME' and 'Feedback ID' columns in existing data
+                    if 'TIME' in existing_data.columns:
+                        existing_data['TIME'] = pd.NA
+                    if 'Feedback ID' in existing_data.columns:
+                        existing_data['Feedback ID'] = pd.NA
+                        
+                    logging.info("All DiD's Were Done, Clearing Sheet!")
+                    logging.info('Time Cleared')
+                    logging.info('Feedback ID Cleared')
+                else:
+                    for index, new_row in df.iterrows():
+                        if str(existing_row["DID'S"]).lower() == str(new_row["DID'S"]).lower():                            
+                            # Update the existing row in the DataFrame using the index `dex`
+                            existing_data.loc[dex] = new_row
 
-    # Concatenate the existing data with the new data
-    if not existing_data.empty:
-        # pprint(existing_data)
-        # print(len(existing_data))
-        # print('-----------------------------')
-        # Iterate through existing_data and print each column with reference
-        # for index, row in existing_data.iterrows():
-        #     print(f"Row {index + 1}:")
-        #     for col_name in existing_data.columns:
-        #         print(f"  Column '{col_name}' at index {index}: {row[col_name]}")
-            
-        print('-----------------------------')
-        df = pd.concat([existing_data, df], ignore_index=True)
-        # print('printing DF')
-        # pprint(df)
-        # print(len(df))
-        # print('-----------------------------')
-        # Iterate through existing_data and print each column with reference
-        # for index, row in df.iterrows():
-        #     print(f"Row {index + 1}:")
-        #     for col_name in df.columns:
-        #         print(f"  Column '{col_name}' at index {index}: {row[col_name]}")
-
+                            # print(f"Updated Row => {existing_data.loc[dex]}")
+                            # print(f"New Row => {new_row}")
+                            break
+                        
     # Clear the existing data in the worksheet
     worksheet.clear()
 
     # Write the updated DataFrame to the worksheet
-    set_with_dataframe(worksheet, df)
+    set_with_dataframe(worksheet, existing_data)
 
+    logging.info("Sheet updated successfully.")
+    print("Sheet updated successfully.")
 
-    
         
 def fill_form(driver, phone_numbers, current_time, mail):
     """
@@ -370,20 +362,38 @@ def main(driver, values):
     finally:
         # Close the WebDriver & Mail Connection after the task is done
         logout(mail)
-        driver.quit()
         end_time = datetime.now(pytz.utc).replace(microsecond=0)
         logging.info(f'Driver Exited After Successful Run Of The BOT at => {end_time}!')
         
         # Convert results_list to a DataFrame and print it
         if results_list:
             df = pd.DataFrame(results_list)
-            print(df)
+            # print(df)
             
             update_sheet_data(sheet_url, df)
 
             logging.info('Results printed to the console')
         else:
             print('List is empty')
+            
+            df = pd.DataFrame(results_list)
+            # print(df)
+            
+            update_sheet_data(sheet_url, df, clear=True)
+            
+            json_response = get_sheet_data(sheet_id)
+    
+            if json_response:
+                # Extract the 'values' key from the response
+                values = json_response.get('values', [])
+                
+                if values:
+                    # Remove the header row if present
+                    values = values[1:]
+                
+                main(driver, values)
+            
+        driver.quit()
 
 if __name__ == "__main__":
     '''
